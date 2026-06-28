@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+recordings/*.wav
+.agents/
+.devin/
+swiftui-design-skill
+skills-lock.json
+
+# Personal meeting data — never commit (app recreates locally)
+meetings.json

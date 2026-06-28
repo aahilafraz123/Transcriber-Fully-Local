@@ -1,0 +1,597 @@
+/* ============================================================
+   Design System: "Studio Monitor"
+   Palette: deep charcoal base, warm coral accent, monospace meta
+   Grid: 8pt spacing
+   Typography: system sans display, Georgia body, SF Mono captions
+   ============================================================ */
+
+/* ---- Tokens ---- */
+:root {
+    --bg:          #111111;
+    --surface:     #1a1a1a;
+    --surface-hover:#222222;
+    --border:      #2a2a2a;
+    --text:        #e8e8e8;
+    --text-2:      #999999;
+    --text-3:      #555555;
+    --accent:      #E8634A;
+    --accent-hover:#d4533a;
+    --green:       #4ADE80;
+    --green-dim:   #22803d;
+    --red:         #ef4444;
+    --red-dim:     #991b1b;
+    --yellow:      #FBBF24;
+    --radius-s:    6px;
+    --radius-m:    10px;
+    --radius-l:    14px;
+    --mono: "SF Mono", "Menlo", "Consolas", monospace;
+}
+
+/* ---- Reset ---- */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Top bar ---- */
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.app-name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-2);
+}
+
+/* ---- Buttons ---- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 20px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: inherit;
+    border: none;
+    border-radius: var(--radius-s);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+    white-space: nowrap;
+}
+
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-start {
+    background: var(--green);
+    color: #111;
+}
+.btn-start:hover:not(:disabled) { background: #3bca6e; }
+
+.btn-stop {
+    background: var(--red);
+    color: #fff;
+}
+.btn-stop:hover:not(:disabled) { background: #dc2626; }
+
+.btn-processing {
+    background: var(--surface);
+    color: var(--text-2);
+}
+
+.btn-secondary {
+    background: var(--surface);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+}
+.btn-secondary:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+/* ---- Pulse dot ---- */
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.3; transform: scale(0.7); }
+}
+
+/* ---- Spinner ---- */
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text-3);
+    border-top-color: var(--text-2);
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Container ---- */
+.container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 16px 24px 48px;
+}
+
+/* ---- Date group headers ---- */
+.date-group {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 32px 0 8px;
+    padding-left: 16px;
+}
+
+.date-group:first-child { margin-top: 8px; }
+
+/* ---- Meeting rows ---- */
+.meeting-row {
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius-m);
+    transition: background 0.12s;
+    position: relative;
+}
+
+.meeting-row:hover { background: var(--surface); }
+
+.meeting-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex: 1;
+    padding: 12px 16px;
+    text-decoration: none;
+    color: inherit;
+    min-width: 0;
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px 12px;
+    color: var(--text-3);
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s;
+    flex-shrink: 0;
+    font-size: 0.875rem;
+    line-height: 1;
+}
+
+.meeting-row:hover .delete-btn { opacity: 1; }
+.delete-btn:hover { color: var(--red); }
+
+.meeting-name {
+    font-weight: 500;
+    font-size: 0.9375rem;
+}
+
+.meeting-meta {
+    display: flex;
+    gap: 16px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+
+.empty {
+    color: var(--text-3);
+    margin-top: 48px;
+    text-align: center;
+    font-size: 0.9375rem;
+}
+
+/* ---- Pulse dot (red variant for live page) ---- */
+.pulse-dot-red {
+    background: var(--red);
+    width: 10px;
+    height: 10px;
+}
+
+.pulse-dot-red.paused {
+    animation: none;
+    opacity: 0.35;
+    background: var(--yellow);
+}
+
+/* ---- Live recording page ---- */
+.live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.live-label {
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.02em;
+}
+
+.live-timer {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-3);
+    margin-left: 4px;
+}
+
+.live-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-pause {
+    background: var(--surface);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+}
+
+.btn-pause:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.live-transcript {
+    margin-top: 24px;
+    font-family: "Georgia", "Times New Roman", serif;
+    font-size: 1rem;
+    line-height: 1.9;
+    color: #c8c8c8;
+}
+
+.live-transcript p { white-space: pre-wrap; }
+
+/* speaker labels in transcript */
+.speaker-label {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-right: 8px;
+    display: inline-block;
+}
+.speaker-you {
+    color: var(--green);
+    background: rgba(74, 222, 128, 0.1);
+}
+.speaker-other {
+    color: var(--accent);
+    background: rgba(232, 99, 74, 0.1);
+}
+
+/* copy button on live page */
+.btn-copy-live {
+    background: var(--surface);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+    font-size: 0.75rem;
+    padding: 6px 14px;
+}
+.btn-copy-live:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+.btn-copy-live.copied {
+    color: var(--green);
+    border-color: var(--green);
+}
+
+/* ---- Meeting detail page ---- */
+.meeting-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.back-arrow {
+    color: var(--text-2);
+    text-decoration: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 6px 10px;
+    border-radius: var(--radius-s);
+    transition: background 0.12s, color 0.12s;
+}
+
+.back-arrow:hover {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.btn-copy {
+    background: var(--surface);
+    color: var(--text-2);
+    font-size: 0.75rem;
+    padding: 6px 16px;
+    border: 1px solid var(--border);
+}
+
+.btn-copy:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.btn-copy.copied {
+    color: var(--green);
+    border-color: var(--green);
+}
+
+.meeting-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+}
+
+.meeting-date {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-3);
+    margin-bottom: 32px;
+}
+
+.transcript-body {
+    font-family: "Georgia", "Times New Roman", serif;
+    font-size: 1rem;
+    line-height: 1.9;
+    color: #c8c8c8;
+}
+
+.transcript-body p { white-space: pre-wrap; }
+
+/* ---- Audio Device Panel ---- */
+.device-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+}
+
+.device-panel-title {
+    font-size: 0.6875rem;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 16px;
+}
+
+.device-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.device-row:last-child { border-bottom: none; }
+
+.device-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.device-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.device-detail {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--text-3);
+}
+
+/* toggle switch */
+.toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    left: 3px;
+    top: 3px;
+    background: var(--text-3);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.toggle input:checked + .toggle-track {
+    background: var(--green);
+}
+
+.toggle input:checked + .toggle-track::after {
+    transform: translateX(18px);
+    background: #fff;
+}
+
+.toggle input:disabled + .toggle-track {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ---- Meeting detection badge ---- */
+.meeting-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: rgba(251, 191, 36, 0.1);
+    color: var(--yellow);
+    letter-spacing: 0.02em;
+}
+
+.meeting-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--yellow);
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* ---- Settings section on index ---- */
+.settings-section {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+}
+
+.settings-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    padding: 8px 0;
+    transition: color 0.12s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-toggle-btn:hover { color: var(--text-2); }
+
+.settings-toggle-btn .arrow {
+    display: inline-block;
+    transition: transform 0.2s;
+    font-size: 0.625rem;
+}
+
+.settings-toggle-btn.open .arrow { transform: rotate(90deg); }
+
+.settings-body {
+    display: none;
+    padding-top: 16px;
+}
+
+.settings-body.visible { display: block; }
+
+/* ---- Inline rename input ---- */
+.rename-input {
+    font-family: inherit;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-s);
+    padding: 4px 8px;
+    width: 100%;
+    outline: none;
+}
+
+.rename-input-sm {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    padding: 2px 6px;
+}
+
+.meeting-title {
+    cursor: pointer;
+}
+
+.meeting-title:hover {
+    text-decoration-style: dotted;
+    text-underline-offset: 4px;
+    text-decoration: underline;
+    text-decoration-color: var(--text-3);
+}
+
+/* Speaker diarization (who-said-what) */
+.speaker-turn {
+    margin-bottom: 18px;
+}
+
+.speaker-name {
+    display: inline-block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--accent);
+    margin-bottom: 4px;
+    cursor: pointer;
+}
+
+.speaker-name:hover {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+}
+
+.speaker-text {
+    margin: 0;
+    color: var(--text);
+}

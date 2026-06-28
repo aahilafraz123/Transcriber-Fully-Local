@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transcriber</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="top-bar">
+        <span class="app-name">Transcriber</span>
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span id="meeting-badge" class="meeting-badge" style="display:none;">
+                <span class="meeting-badge-dot"></span>
+                <span id="meeting-badge-text">Meeting detected</span>
+            </span>
+            <button id="rec-btn" class="btn {% if is_recording %}btn-stop{% else %}btn-start{% endif %}">
+                {% if is_recording %}<span class="pulse-dot"></span> Stop{% else %}Record{% endif %}
+            </button>
+        </div>
+    </header>
+
+    <main class="container">
+        {% set ns = namespace(last_label='') %}
+        {% for m in meetings|reverse %}
+            {% set d = m.date[:10] %}
+            {% set dt = d | meeting_date_label %}
+            {% if dt != ns.last_label %}
+                {% set ns.last_label = dt %}
+                <h2 class="date-group">{{ dt }}</h2>
+            {% endif %}
+            <div class="meeting-row" data-id="{{ m.id }}">
+                <a href="/meeting/{{ m.id }}" class="meeting-link">
+                    <span class="meeting-name">{{ m.name }}</span>
+                    <span class="meeting-meta">
+                        <span class="duration">{{ m.duration_minutes | format_duration }}</span>
+                        <span class="time">{{ m.date | format_time }}</span>
+                    </span>
+                </a>
+                <button class="delete-btn" data-id="{{ m.id }}" title="Delete">&times;</button>
+            </div>
+        {% else %}
+            <p class="empty">No recordings yet. Hit Record to start.</p>
+        {% endfor %}
+
+        <div class="settings-section">
+            <button id="settings-btn" class="settings-toggle-btn">
+                <span class="arrow">&#9654;</span> Audio Devices
+            </button>
+            <div id="settings-body" class="settings-body">
+                <div class="device-panel">
+                    <div class="device-panel-title">Multi-Output Device</div>
+                    <div id="device-list">
+                        <p style="color:var(--text-3);font-size:0.8125rem;">Loading devices...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const btn = document.getElementById('rec-btn');
+        let recording = {{ 'true' if is_recording else 'false' }};
+
+        function updateBtn() {
+            if (recording) {
+                btn.className = 'btn btn-stop';
+                btn.innerHTML = '<span class="pulse-dot"></span> Stop';
+            } else {
+                btn.className = 'btn btn-start';
+                btn.textContent = 'Record';
+            }
+        }
+
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                if (!recording) {
+                    const res = await fetch('/start', { method: 'POST' });
+                    if (res.ok) {
+                        window.location.href = '/live';
+                        return;
+                    }
+                } else {
+                    btn.className = 'btn btn-processing';
+                    btn.innerHTML = '<span class="spinner"></span> Processing\u2026';
+                    const res = await fetch('/stop', { method: 'POST' });
+                    if (res.ok) {
+                        const meeting = await res.json();
+                        window.location.href = '/meeting/' + meeting.id;
+                        return;
+                    }
+                    recording = false;
+                    updateBtn();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            btn.disabled = false;
+        });
+
+        /* Inline rename on double-click */
+        document.querySelectorAll('.meeting-name').forEach(nameEl => {
+            nameEl.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const link = nameEl.closest('.meeting-link');
+                if (link) link.style.pointerEvents = 'none';
+                const row = nameEl.closest('.meeting-row');
+                const id = row.dataset.id;
+                const current = nameEl.textContent.trim();
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = current;
+                input.className = 'rename-input rename-input-sm';
+                nameEl.textContent = '';
+                nameEl.appendChild(input);
+                input.focus();
+                input.select();
+
+                async function save() {
+                    if (link) link.style.pointerEvents = '';
+                    const val = input.value.trim();
+                    if (!val || val === current) { nameEl.textContent = current; return; }
+                    try {
+                        const res = await fetch('/meeting/' + id, {
+                            method: 'PATCH',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({name: val})
+                        });
+                        nameEl.textContent = res.ok ? val : current;
+                    } catch (err) { nameEl.textContent = current; console.error(err); }
+                }
+
+                input.addEventListener('blur', save);
+                input.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+                    if (ev.key === 'Escape') { if (link) link.style.pointerEvents = ''; nameEl.textContent = current; }
+                });
+            });
+        });
+
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                try {
+                    const res = await fetch('/meeting/' + id, { method: 'DELETE' });
+                    if (res.ok) {
+                        const row = btn.closest('.meeting-row');
+                        const prev = row.previousElementSibling;
+                        const next = row.nextElementSibling;
+                        row.remove();
+                        if (prev && prev.classList.contains('date-group')) {
+                            if (!next || next.classList.contains('date-group') || !next.classList.contains('meeting-row')) {
+                                prev.remove();
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            });
+        });
+
+        /* Settings panel toggle */
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsBody = document.getElementById('settings-body');
+        settingsBtn.addEventListener('click', () => {
+            settingsBtn.classList.toggle('open');
+            settingsBody.classList.toggle('visible');
+            if (settingsBody.classList.contains('visible')) loadDevices();
+        });
+
+        /* Load multi-output sub-devices */
+        async function loadDevices() {
+            try {
+                const res = await fetch('/api/devices');
+                if (!res.ok) return;
+                const data = await res.json();
+                const list = document.getElementById('device-list');
+                if (!data.devices || data.devices.length === 0) {
+                    list.innerHTML = '<p style="color:var(--text-3);font-size:0.8125rem;">No sub-devices found.</p>';
+                    return;
+                }
+                list.innerHTML = data.devices.map(d => `
+                    <div class="device-row">
+                        <div class="device-info">
+                            <span class="device-name">${d.name}</span>
+                            <span class="device-detail">${d.uid || ''}</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" ${d.enabled ? 'checked' : ''} ${d.required ? 'disabled' : ''} data-uid="${d.uid}">
+                            <span class="toggle-track"></span>
+                        </label>
+                    </div>
+                `).join('');
+
+                list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    cb.addEventListener('change', async () => {
+                        const uid = cb.dataset.uid;
+                        try {
+                            await fetch('/api/devices/toggle', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({uid: uid, enabled: cb.checked})
+                            });
+                        } catch (e) {
+                            cb.checked = !cb.checked;
+                            console.error(e);
+                        }
+                    });
+                });
+            } catch (e) {
+                console.error('Failed to load devices', e);
+            }
+        }
+
+        /* Poll for active meetings (Teams/Slack) */
+        async function pollMeetings() {
+            try {
+                const res = await fetch('/api/meeting-status');
+                if (!res.ok) return;
+                const data = await res.json();
+                const badge = document.getElementById('meeting-badge');
+                const badgeText = document.getElementById('meeting-badge-text');
+                if (data.active) {
+                    badge.style.display = 'inline-flex';
+                    badgeText.textContent = data.app + ' meeting';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (e) {}
+        }
+        pollMeetings();
+        setInterval(pollMeetings, 5000);
+    </script>
+</body>
+</html>

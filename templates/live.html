@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recording – Transcriber</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="top-bar">
+        <div class="live-indicator">
+            <span class="pulse-dot pulse-dot-red"></span>
+            <span class="live-label">Recording</span>
+            <span class="live-timer" id="timer">0:00</span>
+        </div>
+        <div class="live-controls">
+            <button id="copy-btn" class="btn btn-copy-live" title="Copy the full transcript so far to paste into your AI tool">Copy transcript</button>
+            <button id="pause-btn" class="btn btn-pause">Pause</button>
+            <button id="stop-btn" class="btn btn-stop">Stop</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="transcript-area" class="live-transcript">
+            <p class="empty" id="placeholder">Listening — transcript will appear shortly.</p>
+        </div>
+    </main>
+
+    <script>
+        const stopBtn = document.getElementById('stop-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        const dot = document.querySelector('.pulse-dot-red');
+        const label = document.querySelector('.live-label');
+        const timerEl = document.getElementById('timer');
+        const area = document.getElementById('transcript-area');
+        let polling = true;
+        let paused = false;
+        const startedAt = Date.now();
+
+        function updateTimer() {
+            if (paused) return;
+            const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+            const m = Math.floor(elapsed / 60);
+            const s = elapsed % 60;
+            timerEl.textContent = m + ':' + String(s).padStart(2, '0');
+        }
+        const timerId = setInterval(updateTimer, 1000);
+
+        function renderTranscript(data) {
+            if (data.text) {
+                area.innerHTML = '<p>' + data.text.replace(/</g, '&lt;') + '</p>';
+            }
+        }
+
+        async function pollTranscript() {
+            while (polling) {
+                try {
+                    const res = await fetch('/transcript');
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.text) {
+                            renderTranscript(data);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Poll error', e);
+                }
+                await new Promise(r => setTimeout(r, 3000));
+            }
+        }
+
+        copyBtn.addEventListener('click', async () => {
+            // Pull the authoritative full transcript-so-far from the server,
+            // not the on-screen text, so every committed word is included even
+            // if the live render is mid-update. Recording is never interrupted.
+            let text = '';
+            try {
+                const res = await fetch('/transcript/snapshot');
+                if (res.ok) text = (await res.json()).text || '';
+            } catch (e) {
+                console.error('Snapshot fetch failed, falling back to screen', e);
+            }
+            if (!text.trim()) text = area.innerText || '';
+            if (!text.trim()) return;
+            try {
+                await navigator.clipboard.writeText(text.trim());
+                copyBtn.textContent = 'Copied';
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy transcript';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            } catch (e) {
+                console.error('Copy failed', e);
+            }
+        });
+
+        pauseBtn.addEventListener('click', async () => {
+            pauseBtn.disabled = true;
+            try {
+                if (!paused) {
+                    const res = await fetch('/pause', { method: 'POST' });
+                    if (res.ok) {
+                        paused = true;
+                        pauseBtn.textContent = 'Resume';
+                        pauseBtn.className = 'btn btn-start';
+                        dot.classList.add('paused');
+                        label.textContent = 'Paused';
+                    }
+                } else {
+                    const res = await fetch('/resume', { method: 'POST' });
+                    if (res.ok) {
+                        paused = false;
+                        pauseBtn.textContent = 'Pause';
+                        pauseBtn.className = 'btn btn-pause';
+                        dot.classList.remove('paused');
+                        label.textContent = 'Recording';
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            pauseBtn.disabled = false;
+        });
+
+        stopBtn.addEventListener('click', async () => {
+            polling = false;
+            clearInterval(timerId);
+            stopBtn.disabled = true;
+            pauseBtn.disabled = true;
+            stopBtn.className = 'btn btn-processing';
+            stopBtn.innerHTML = '<span class="spinner"></span> Processing\u2026';
+            dot.style.animation = 'none';
+            dot.style.opacity = '0.3';
+            label.textContent = 'Saving';
+
+            try {
+                const res = await fetch('/stop', { method: 'POST' });
+                if (res.ok) {
+                    const meeting = await res.json();
+                    window.location.href = '/meeting/' + meeting.id;
+                    return;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            window.location.href = '/';
+        });
+
+        pollTranscript();
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Core app
+Flask>=3.0,<4.0
+numpy>=1.26,<2.2
+scipy>=1.11
+sounddevice>=0.4.6
+soundfile>=0.12.1
+
+# Transcription: faster-whisper (CTranslate2) running large-v3-turbo.
+faster-whisper>=1.0.3
+
+# Optional: speaker diarization ("who said what"). Requires a free Hugging
+# Face token (see README) and pulls in torch. Comment out to skip.
+pyannote.audio>=3.1

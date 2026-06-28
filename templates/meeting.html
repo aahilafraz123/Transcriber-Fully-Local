@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ meeting.name }} – Transcriber</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container" style="padding-top:32px;">
+        <div class="meeting-header">
+            <a href="/" class="back-arrow">&larr;</a>
+            <button id="copy-btn" class="btn btn-copy">Copy</button>
+        </div>
+        <h1 class="meeting-title" id="title" data-id="{{ meeting.id }}" title="Click to rename">{{ meeting.name }}</h1>
+        <p class="meeting-date">{{ meeting.date | format_time }} &middot; {{ meeting.duration_minutes | format_duration }} &middot; {{ meeting.date[:10] }}</p>
+
+        <div class="transcript-body">
+            {% if meeting.diarized %}
+            <div id="diarized" data-id="{{ meeting.id }}">
+                {% for seg in meeting.diarized %}
+                <div class="speaker-turn" data-speaker="{{ seg.speaker }}">
+                    <span class="speaker-name" title="Click to rename speaker">{{ seg.speaker | speaker_label(meeting.speaker_names) }}</span>
+                    <p class="speaker-text">{{ seg.text }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            <p id="transcript-text" hidden>{{ meeting.transcript }}</p>
+            {% else %}
+            <p id="transcript-text">{{ meeting.transcript }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const btn = document.getElementById('copy-btn');
+        const diarized = document.getElementById('diarized');
+
+        function plainText() {
+            if (diarized) {
+                return Array.from(diarized.querySelectorAll('.speaker-turn'))
+                    .map(t => t.querySelector('.speaker-name').textContent + ': '
+                        + t.querySelector('.speaker-text').textContent)
+                    .join('\n');
+            }
+            return document.getElementById('transcript-text').textContent;
+        }
+
+        /* Rename a speaker everywhere it appears */
+        if (diarized) {
+            const meetingId = diarized.dataset.id;
+            diarized.addEventListener('click', (e) => {
+                const nameEl = e.target.closest('.speaker-name');
+                if (!nameEl || nameEl.querySelector('input')) return;
+                const turn = nameEl.closest('.speaker-turn');
+                const raw = turn.dataset.speaker;
+                const current = nameEl.textContent.trim();
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = current;
+                input.className = 'rename-input';
+                nameEl.textContent = '';
+                nameEl.appendChild(input);
+                input.focus();
+                input.select();
+
+                async function save() {
+                    const val = input.value.trim();
+                    if (!val || val === current) { nameEl.textContent = current; return; }
+                    try {
+                        const res = await fetch('/meeting/' + meetingId + '/speakers', {
+                            method: 'PATCH',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({speaker: raw, label: val})
+                        });
+                        if (res.ok) {
+                            diarized.querySelectorAll('.speaker-turn[data-speaker="' + raw + '"] .speaker-name')
+                                .forEach(el => { el.textContent = val; });
+                        } else {
+                            nameEl.textContent = current;
+                        }
+                    } catch (err) { nameEl.textContent = current; console.error(err); }
+                }
+                input.addEventListener('blur', save);
+                input.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+                    if (ev.key === 'Escape') { nameEl.textContent = current; }
+                });
+            });
+        }
+
+        btn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(plainText());
+                btn.textContent = 'Copied';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            } catch (e) {
+                console.error('Copy failed', e);
+            }
+        });
+
+        /* Inline rename */
+        const titleEl = document.getElementById('title');
+        const meetingId = titleEl.dataset.id;
+
+        titleEl.addEventListener('click', () => {
+            if (titleEl.querySelector('input')) return;
+            const current = titleEl.textContent.trim();
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = current;
+            input.className = 'rename-input';
+            titleEl.textContent = '';
+            titleEl.appendChild(input);
+            input.focus();
+            input.select();
+
+            async function save() {
+                const val = input.value.trim();
+                if (!val || val === current) {
+                    titleEl.textContent = current;
+                    return;
+                }
+                try {
+                    const res = await fetch('/meeting/' + meetingId, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name: val})
+                    });
+                    if (res.ok) {
+                        titleEl.textContent = val;
+                        document.title = val + ' – Transcriber';
+                    } else {
+                        titleEl.textContent = current;
+                    }
+                } catch (e) {
+                    titleEl.textContent = current;
+                    console.error(e);
+                }
+            }
+
+            input.addEventListener('blur', save);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                if (e.key === 'Escape') { titleEl.textContent = current; }
+            });
+        });
+    </script>
+</body>
+</html>
