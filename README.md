@@ -105,6 +105,8 @@ It will not run on Windows or Linux as-is.
 
 - **System audio** is captured through BlackHole and contains the remote
   participants of a Teams/Slack call.
+- **In-person mode** skips BlackHole entirely and records 100% from the
+  microphone, for meetings in a room or on your phone.
 - **Your microphone** is captured separately.
 - The two are blended into a proven **80% system / 20% mic** mix, and that mix
   is what produces the transcript.
@@ -124,10 +126,26 @@ It will not run on Windows or Linux as-is.
   stop.
 - **Mid-meeting "Copy transcript"** snapshot, so you can grab the transcript
   so-far without stopping the recording.
+- **Virtual or In-person, asked every time you hit Record.** Virtual records
+  the call audio (BlackHole) plus your mic; In-person records 100% from the
+  Mac's microphone for meetings in a room or on your phone, and leaves your
+  speakers untouched.
+- **Microphone check** in the Audio Devices panel: records 4 seconds, shows
+  the level, and tells you what it heard.
+- **Resume a stopped meeting.** Hover a meeting in the list (or open it) and
+  click **Resume**. New audio and transcript are appended to that meeting,
+  marked with a "Resumed" line; the duration adds up and the original name
+  and date stay.
+- **Optional meeting names**, set before or during the recording; unnamed
+  meetings get a date/time title automatically.
+- **Navigate while recording**: browse past transcripts and come back to the
+  live page without interrupting the capture.
 - **Optional speaker diarization** ("who said what"), running locally via
   pyannote.
 - **Automatic meeting detection** for Teams/Slack calls.
 - **Automatic cleanup** of old recordings (configurable).
+- **Menu bar launcher** (`Transcriber.app`): one click starts the server and
+  opens the page; the icon shows a REC timer while recording.
 
 ---
 
@@ -140,9 +158,143 @@ It will not run on Windows or Linux as-is.
   ```bash
   brew install switchaudio-osx
   ```
-- **Python 3.10+**.
+- **Python 3.10+** (macOS ships 3.9, which is too old — the playbook installs
+  3.12 via `uv`).
 - *(Optional, for diarization only)* a free
   [Hugging Face](https://huggingface.co) account and access token.
+
+---
+
+## 🚀 Setup Playbook (do these in order)
+
+Five stages. Each one has a check so you know it worked before moving on.
+If anything looks off at any point, run the health check and it will tell you
+which stage to go back to:
+
+```bash
+.venv/bin/python doctor.py
+```
+
+> Using Claude Code? Type `/onboard` in the project and it walks you through
+> this playbook, runs the checks for you, and fixes what it can.
+
+### Stage 1 — Command-line tools (5 min)
+
+You need [Homebrew](https://brew.sh). Then:
+
+```bash
+brew install switchaudio-osx uv
+```
+
+- `SwitchAudioSource` lets the app flip your output device while recording.
+- `uv` installs a modern Python for you. The Python that ships with macOS is
+  3.9 and **will not work**; this app needs 3.10+.
+
+**Check:** `SwitchAudioSource -c` prints your current output device.
+
+### Stage 2 — BlackHole virtual audio driver (needs your password + a reboot)
+
+```bash
+brew install --cask blackhole-2ch
+```
+
+Homebrew asks for your macOS login password to run the installer. Then
+**reboot** (or run `sudo killall coreaudiod`). Until the audio system
+restarts, macOS does not load the driver and nothing downstream can see it.
+
+**Check:** `SwitchAudioSource -a` lists `BlackHole 2ch`. Also open **Audio
+MIDI Setup** (Spotlight → "Audio MIDI Setup") and confirm **BlackHole 2ch**
+appears in the left column with "2 ins / 2 outs".
+
+### Stage 3 — Multi-Output Device in Audio MIDI Setup (2 min, GUI)
+
+This is the one device you must create. It sends call audio to **two places at
+once**: your speakers (so you hear it) and BlackHole (so the app records it).
+
+1. Open **Audio MIDI Setup**.
+2. Click **`+`** (bottom-left) → **Create Multi-Output Device**.
+3. In the table on the right, tick **Use** on both **BlackHole 2ch** and your
+   speakers/headphones (e.g. **MacBook Pro Speakers**).
+4. Set **Primary Device** (dropdown at the top) to your speakers/headphones.
+5. Tick **Drift Correction** on the **BlackHole 2ch** row only.
+6. Make sure the device is named exactly **`Multi-Output Device`**. That is
+   the default name; if you changed it, right-click → Rename.
+
+You do **not** need an Aggregate Device. The app captures BlackHole and your
+microphone as two separate inputs and mixes them itself. If you have an empty
+Aggregate Device lying around, it is harmless.
+
+**Check:** `SwitchAudioSource -a -t output` lists `Multi-Output Device`.
+
+### Stage 4 — Python environment (5 min, ~3 GB download)
+
+From the project folder:
+
+```bash
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+```
+
+Optional but recommended: pre-download the speech model (~1.5 GB) so the
+first recording doesn't stall:
+
+```bash
+.venv/bin/python -c "from faster_whisper import WhisperModel as M; M('large-v3-turbo', compute_type='int8')"
+```
+
+**Check:** `.venv/bin/python doctor.py` shows PASS for Python, packages, and
+model.
+
+### Stage 5 — Run it
+
+**Easiest: the menu bar app.** Build it once:
+
+```bash
+./make_app.sh
+```
+
+That creates **Transcriber.app** in `~/Applications`. Open it (Spotlight →
+"Transcriber"). A 🎙 icon appears in the menu bar at the top right, the server
+starts, and your browser opens to http://localhost:5001. The dropdown has
+**Open in Browser**, **Stop/Start Transcriber**, **Show Server Log**, and
+**Quit**. While a meeting records, the icon shows a live **REC** timer. To have
+it start every time you log in: System Settings → General → Login Items → `+`
+→ Transcriber. The first recording will ask for microphone permission for
+"Transcriber"; click Allow.
+
+**From a terminal instead:**
+
+```bash
+./start.sh            # same as: .venv/bin/python app.py
+```
+
+Always use `.venv/bin/python` (or the scripts above), not `python` or
+`python3`. Those point at the system Python, which has none of the packages.
+
+Open **http://localhost:5001**. First, expand **Audio Devices** at the bottom
+and click **Test microphone**: speak for 4 seconds and it shows what it heard.
+If it reports silence, macOS has not given microphone permission to the app
+that launched the server (System Settings → Privacy & Security → Microphone).
+
+Then click **Record**, choose **Virtual**, play any audio, talk, and click
+**Stop**. You should still hear the audio while recording, the live preview
+should show text, and your output device should switch back when you stop.
+For a room or phone meeting choose **In-person** instead; only the microphone
+is used.
+
+### Common mistakes
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `zsh: command not found: python` | macOS has no `python`, only `python3` | use `.venv/bin/python app.py` |
+| `ModuleNotFoundError: No module named 'sounddevice'` | ran with system Python | use `.venv/bin/python app.py` |
+| BlackHole missing from Audio MIDI Setup after install | driver not loaded yet | reboot, or `sudo killall coreaudiod` |
+| Record button does nothing / "BlackHole device not found" | app started before BlackHole was loaded | restart the app (`Ctrl+C`, run again) |
+| Output stuck on "Multi-Output Device" after a failed start | restore didn't run | `SwitchAudioSource -s "MacBook Pro Speakers"` |
+| You can't hear the call while recording | speakers not ticked in Multi-Output Device | Stage 3, step 3 |
+| Transcript has only your voice / only theirs | BlackHole not ticked, or mic name mismatch | Stage 3, or set `MIC_DEVICE` |
+| Your voice is missing; **Test microphone** says silence | macOS mic permission off for Terminal (or whatever launched the app) | System Settings → Privacy & Security → Microphone → enable it, restart the app |
+| `pyannote.audio` import error mentioning `AudioMetaData` | torchaudio too new | reinstall from `requirements.txt` (pins torch 2.8) |
 
 ---
 
@@ -226,12 +378,24 @@ match your hardware (override via environment variables if not — see
 
 ## Installation & Running
 
+See the [Setup Playbook](#-setup-playbook-do-these-in-order) above for the
+full ordered walkthrough. The short version, once BlackHole and the
+Multi-Output Device exist:
+
 ```bash
-pip install -r requirements.txt
-python app.py            # serves http://localhost:5001
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+./make_app.sh                      # builds ~/Applications/Transcriber.app (menu bar launcher)
+open ~/Applications/Transcriber.app
 ```
 
-Open **http://localhost:5001** in your browser and click **Record**.
+Or without the menu bar app: `./start.sh` (serves http://localhost:5001).
+
+Health check at any time:
+
+```bash
+.venv/bin/python doctor.py
+```
 
 > On first run, faster-whisper downloads the `large-v3-turbo` weights
 > (~1.5 GB), cached locally afterward. This is a one-time download; everything
@@ -301,14 +465,39 @@ All settings are environment variables (see `config.py`):
 
 ## Usage
 
-1. Click **Record**. The app switches your output to the Multi-Output Device and
-   starts capturing.
-2. Watch the **live preview** transcribe as the meeting goes. Use **Copy
-   transcript** any time to grab the transcript so-far without stopping.
-3. Click **Stop**. Your previous output device is restored, and a more accurate
+1. Click **Record**. You are asked **every time** how you are meeting:
+   - **Virtual**: a call on this Mac (Teams, Slack, Zoom...). Records the call
+     audio through BlackHole plus your microphone, and switches your output to
+     the Multi-Output Device for the duration.
+   - **In-person**: a meeting in the room or on your phone. Records **100%
+     from the Mac's microphone**. BlackHole and your speakers are not touched,
+     so this mode works even without the audio setup above.
+
+   Optionally type a name in the same dialog. Leave it blank and the meeting is
+   named by date and time (e.g. "Meeting September 20 5:48pm"). Naming never
+   blocks recording.
+2. The live page opens. Watch the **live preview** transcribe as the meeting
+   goes. Use **Copy transcript** any time to grab the transcript so-far without
+   stopping.
+3. **Name or rename the meeting while it records.** The name box on the live
+   page (and on the in-progress row of the meetings list) saves as you type.
+   Whatever it says when you stop becomes the meeting title.
+4. **Navigate freely while recording.** Click **← All meetings** to go back to
+   the list; the recording keeps going and shows as a red in-progress row at
+   the top with a live timer. Open any past meeting to read its transcript,
+   then use the **Live transcript** link (top right on every page) to jump
+   back. Stop works from the live page or the list.
+5. Click **Stop**. Your previous output device is restored, and a more accurate
    transcript is generated in the background.
-4. Open the meeting to read the transcript, **rename the meeting**, and (if
-   diarization is enabled) **rename speakers**.
+6. Open the meeting to read the transcript, **rename the meeting** (click the
+   title), and (if diarization is enabled) **rename speakers**.
+7. **Need to continue a meeting you already stopped** (a lecture after the
+   break, a call that reconnected)? Click **Resume recording** on the meeting
+   page, or hover the meeting in the list and click **Resume**. You are asked
+   Virtual or In-person again, then recording continues into the same
+   meeting: audio is appended to its recording file, the new transcript is
+   added under a "— Resumed 1:05pm —" line, and the list shows "2 parts".
+   The live page can show the earlier transcript above the new one.
 
 ---
 

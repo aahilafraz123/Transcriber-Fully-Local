@@ -595,3 +595,274 @@ body {
     margin: 0;
     color: var(--text);
 }
+
+/* ---- Meeting name (optional, before/during recording) ---- */
+.name-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius-s);
+    padding: 7px 10px;
+    font-size: 0.875rem;
+    min-width: 220px;
+    outline: none;
+}
+.name-input:focus { border-color: var(--accent); }
+.name-input::placeholder { color: var(--text-3); }
+.name-input.saved { border-color: var(--green-dim); }
+.name-input.live-name { min-width: 260px; }
+@media (max-width: 640px) {
+    .name-input { min-width: 140px; }
+}
+
+/* ---- In-progress recording row on the meetings list ---- */
+.recording-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    margin: 8px 0 20px;
+    border: 1px solid var(--red-dim);
+    border-radius: var(--radius-m);
+    background: var(--surface);
+}
+.recording-row .recording-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+.recording-row .recording-title {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.recording-row .recording-title.untitled { color: var(--text-2); font-style: italic; }
+.recording-row .recording-timer {
+    font-family: var(--mono);
+    color: var(--text-2);
+    font-size: 0.8125rem;
+}
+.recording-row .recording-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ---- Nav links shared by pages ---- */
+.nav-link {
+    color: var(--text-2);
+    text-decoration: none;
+    font-size: 0.875rem;
+    padding: 6px 10px;
+    border-radius: var(--radius-s);
+    white-space: nowrap;
+}
+.nav-link:hover { color: var(--text); background: var(--surface-hover); }
+.nav-link.live-link {
+    color: var(--red);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.nav-link.live-link:hover { background: rgba(239, 68, 68, 0.1); }
+.live-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex-wrap: wrap; }
+.live-controls { flex-wrap: wrap; }
+
+.live-name-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+.live-name-bar .name-input { flex: 1 1 260px; max-width: 420px; }
+.live-name-hint { color: var(--text-3); font-size: 0.75rem; }
+
+/* ---- Virtual / In-person ---- */
+.mode-chip {
+    display: inline-block;
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.mode-chip.mode-in_person { color: var(--yellow); border-color: rgba(251, 191, 36, 0.35); }
+.mode-chip.mode-virtual { color: var(--green); border-color: rgba(74, 222, 128, 0.3); }
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 100;
+}
+.modal-backdrop[hidden] { display: none; }
+.modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    padding: 24px;
+    width: 100%;
+    max-width: 560px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.modal-title { margin: 0 0 4px; font-size: 1.25rem; font-weight: 600; }
+.modal-sub { margin: 0 0 16px; color: var(--text-2); font-size: 0.875rem; }
+.modal-name { width: 100%; box-sizing: border-box; margin-bottom: 16px; min-width: 0; }
+.mode-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+@media (max-width: 520px) { .mode-options { grid-template-columns: 1fr; } }
+.mode-card {
+    text-align: left;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    padding: 16px;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font: inherit;
+    transition: border-color 0.15s, background 0.15s;
+}
+.mode-card:hover:not(:disabled) { border-color: var(--accent); background: var(--surface-hover); }
+.mode-card:disabled { opacity: 0.6; cursor: wait; }
+.mode-card.busy { border-color: var(--accent); }
+.mode-card-title { font-weight: 600; font-size: 1rem; }
+.mode-card[data-mode="virtual"] .mode-card-title { color: var(--green); }
+.mode-card[data-mode="in_person"] .mode-card-title { color: var(--yellow); }
+.mode-card-desc { color: var(--text-2); font-size: 0.8125rem; line-height: 1.4; }
+.modal-error {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-s);
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid var(--red-dim);
+    color: var(--text);
+    font-size: 0.8125rem;
+}
+.modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+/* ---- Microphone check ---- */
+.panel-help { color: var(--text-2); font-size: 0.8125rem; margin: 0 0 12px; line-height: 1.4; }
+.mic-test-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.mic-meter {
+    flex: 1 1 160px;
+    height: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.mic-meter-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--green);
+    transition: width 0.3s;
+}
+.mic-test-result {
+    margin-top: 12px;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    padding: 10px 12px;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+.mic-test-result.good { border-color: var(--green-dim); }
+.mic-test-result.warn { border-color: rgba(251, 191, 36, 0.5); }
+.mic-test-result.bad { border-color: var(--red-dim); background: rgba(239, 68, 68, 0.08); }
+.mic-test-result em { color: var(--green); font-style: normal; }
+
+/* ---- Narrow screens: stack the in-progress row ---- */
+.recording-row { flex-wrap: wrap; }
+.recording-row .recording-actions { flex-wrap: wrap; }
+.recording-row .recording-actions .name-input { min-width: 0; flex: 1 1 180px; }
+@media (max-width: 640px) {
+    .recording-row { flex-direction: column; align-items: stretch; gap: 10px; }
+    .recording-row .recording-left { flex-wrap: wrap; }
+    .recording-row .recording-actions { width: 100%; }
+    .recording-row .recording-actions .name-input { flex: 1 1 auto; }
+    .top-bar { flex-wrap: wrap; gap: 8px; }
+    .live-left { gap: 10px; }
+}
+
+/* ---- Resume an existing meeting ---- */
+.resume-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    border-radius: var(--radius-s);
+    padding: 4px 9px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    opacity: 0;
+    margin-left: 8px;
+    white-space: nowrap;
+    transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.meeting-row:hover .resume-btn { opacity: 1; }
+.resume-btn:hover:not(:disabled) { color: var(--green); border-color: var(--green-dim); }
+.resume-btn:disabled { cursor: not-allowed; opacity: 0; }
+@media (hover: none) { .resume-btn { opacity: 1; } }
+
+.parts-chip {
+    display: inline-block;
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.modal-resume-note { color: var(--text-3); font-size: 0.75rem; margin: -8px 0 12px; }
+.mode-card.last-used { border-color: var(--text-3); }
+.mode-card.last-used .mode-card-title::after {
+    content: " · last time";
+    color: var(--text-3);
+    font-weight: 400;
+    font-size: 0.75rem;
+}
+
+.resume-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0 0;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    background: var(--surface);
+    font-size: 0.875rem;
+}
+.resume-banner-sub { display: block; color: var(--text-2); font-size: 0.8125rem; margin-top: 2px; }
+.prior-transcript {
+    margin: 10px 0 0;
+    padding: 14px 16px;
+    border-left: 3px solid var(--border);
+    color: var(--text-2);
+    white-space: pre-wrap;
+    line-height: 1.6;
+    max-height: 40vh;
+    overflow: auto;
+}
+#transcript-text, .speaker-text { white-space: pre-wrap; }

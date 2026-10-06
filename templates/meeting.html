@@ -10,10 +10,19 @@
     <div class="container" style="padding-top:32px;">
         <div class="meeting-header">
             <a href="/" class="back-arrow">&larr;</a>
-            <button id="copy-btn" class="btn btn-copy">Copy</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+                {% if recording.is_recording %}
+                <a href="/live" class="nav-link live-link" title="Back to the recording in progress">
+                    <span class="pulse-dot pulse-dot-red"></span> Live transcript
+                </a>
+                {% else %}
+                <a href="/?resume={{ meeting.id }}" class="btn btn-start" title="Keep recording this meeting; new audio and transcript are added to it">&#8635; Resume recording</a>
+                {% endif %}
+                <button id="copy-btn" class="btn btn-copy">Copy</button>
+            </div>
         </div>
         <h1 class="meeting-title" id="title" data-id="{{ meeting.id }}" title="Click to rename">{{ meeting.name }}</h1>
-        <p class="meeting-date">{{ meeting.date | format_time }} &middot; {{ meeting.duration_minutes | format_duration }} &middot; {{ meeting.date[:10] }}</p>
+        <p class="meeting-date">{{ meeting.date | format_time }} &middot; {{ meeting.duration_minutes | format_duration }} &middot; {{ meeting.date[:10] }} &middot; <span class="mode-chip mode-{{ meeting.mode or 'virtual' }}">{{ mode_label }}</span>{% if meeting.parts and meeting.parts|length > 1 %} &middot; <span class="parts-chip">&#8635; {{ meeting.parts|length }} parts</span>{% endif %}</p>
 
         <div class="transcript-body">
             {% if meeting.diarized %}

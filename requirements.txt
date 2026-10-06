@@ -10,4 +10,12 @@ faster-whisper>=1.0.3
 
 # Optional: speaker diarization ("who said what"). Requires a free Hugging
 # Face token (see README) and pulls in torch. Comment out to skip.
-pyannote.audio>=3.1
+pyannote.audio>=3.1,<4.0
+# pyannote.audio 3.x relies on torchaudio.AudioMetaData, which torchaudio 2.9+
+# removed. Keep torch/torchaudio on the 2.8 line until the app moves to
+# pyannote.audio 4.x.
+torch>=2.8,<2.9
+torchaudio>=2.8,<2.9
+
+# Optional: macOS menu bar launcher (menubar.py / make_app.sh).
+rumps>=0.4

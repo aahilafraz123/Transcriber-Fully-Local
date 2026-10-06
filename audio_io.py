@@ -117,3 +117,42 @@ def mix_frames(bh_frames, mic_frames, bh_w=None, mic_w=None):
     else:
         mixed = np.zeros(0, dtype=np.float32)
     return mixed.astype(np.float32)
+
+
+def wav_seconds(path):
+    """Duration of a WAV file in seconds (0.0 if missing/unreadable)."""
+    try:
+        with sf.SoundFile(path) as f:
+            return float(f.frames) / float(f.samplerate or 1)
+    except Exception:
+        return 0.0
+
+
+def append_wav(dst_path, src_path, block=None):
+    """Append src onto dst in place (used when a meeting is resumed).
+
+    If dst does not exist, src simply becomes dst. Both files must share the
+    sample rate, channel count and subtype; otherwise the append is skipped
+    and False is returned so the caller can keep the part file instead.
+    """
+    block = block or config.SAMPLE_RATE
+    if not (src_path and os.path.exists(src_path)):
+        return False
+    if not os.path.exists(dst_path) or os.path.getsize(dst_path) == 0:
+        os.replace(src_path, dst_path)
+        return True
+    with sf.SoundFile(src_path) as src:
+        with sf.SoundFile(dst_path, mode="r+") as dst:
+            if (src.samplerate, src.channels, src.subtype) != (dst.samplerate, dst.channels, dst.subtype):
+                logger.warning("append_wav: format mismatch %s vs %s; not appending",
+                               (src.samplerate, src.channels, src.subtype),
+                               (dst.samplerate, dst.channels, dst.subtype))
+                return False
+            dst.seek(0, sf.SEEK_END)
+            while True:
+                data = src.read(block, dtype="float32")
+                if len(data) == 0:
+                    break
+                dst.write(data)
+    os.unlink(src_path)
+    return True

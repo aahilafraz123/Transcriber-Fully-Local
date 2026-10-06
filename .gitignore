@@ -8,3 +8,6 @@ skills-lock.json
 
 # Personal meeting data — never commit (app recreates locally)
 meetings.json
+
+# Local virtualenv
+.venv/

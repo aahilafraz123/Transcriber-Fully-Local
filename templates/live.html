@@ -8,19 +8,39 @@
 </head>
 <body>
     <header class="top-bar">
-        <div class="live-indicator">
-            <span class="pulse-dot pulse-dot-red"></span>
-            <span class="live-label">Recording</span>
-            <span class="live-timer" id="timer">0:00</span>
+        <div class="live-left">
+            <a href="/" class="nav-link" title="Back to all meetings. Recording keeps going.">&larr; All meetings</a>
+            <div class="live-indicator">
+                <span class="pulse-dot pulse-dot-red{% if recording.is_paused %} paused{% endif %}"></span>
+                <span class="live-label">{{ 'Paused' if recording.is_paused else 'Recording' }}</span>
+                <span class="mode-chip mode-{{ recording.mode }}" title="{{ 'Call audio + microphone' if recording.mode == 'virtual' else '100% microphone' }}">{{ recording.mode_label }}</span>
+                <span class="live-timer" id="timer">0:00</span>
+            </div>
         </div>
         <div class="live-controls">
             <button id="copy-btn" class="btn btn-copy-live" title="Copy the full transcript so far to paste into your AI tool">Copy transcript</button>
-            <button id="pause-btn" class="btn btn-pause">Pause</button>
+            <button id="pause-btn" class="btn {{ 'btn-start' if recording.is_paused else 'btn-pause' }}">{{ 'Resume' if recording.is_paused else 'Pause' }}</button>
             <button id="stop-btn" class="btn btn-stop">Stop</button>
         </div>
     </header>
 
     <main class="container">
+        {% if resume %}
+        <div class="resume-banner">
+            <div>
+                <strong>Resuming &ldquo;{{ resume.name }}&rdquo;</strong>
+                <span class="resume-banner-sub">Part {{ resume.parts + 1 }}. What you record now is added to this meeting's transcript.</span>
+            </div>
+            <button id="prior-toggle" class="btn btn-secondary" type="button">Show earlier transcript</button>
+        </div>
+        <div id="prior-transcript" class="prior-transcript" hidden>{{ resume.transcript }}</div>
+        {% endif %}
+        <div class="live-name-bar">
+            <input id="name-input" class="name-input live-name" type="text" maxlength="120"
+                   placeholder="Name this meeting (optional)" value="{{ recording.name }}"
+                   title="Optional. Saved as you type; used as the meeting title when you stop.">
+            <span class="live-name-hint">Optional. Saved as you type. Leave blank to name it by date and time.</span>
+        </div>
         <div id="transcript-area" class="live-transcript">
             <p class="empty" id="placeholder">Listening — transcript will appear shortly.</p>
         </div>
@@ -30,22 +50,53 @@
         const stopBtn = document.getElementById('stop-btn');
         const pauseBtn = document.getElementById('pause-btn');
         const copyBtn = document.getElementById('copy-btn');
+        const nameInput = document.getElementById('name-input');
         const dot = document.querySelector('.pulse-dot-red');
         const label = document.querySelector('.live-label');
         const timerEl = document.getElementById('timer');
         const area = document.getElementById('transcript-area');
         let polling = true;
-        let paused = false;
-        const startedAt = Date.now();
+        let paused = {{ 'true' if recording.is_paused else 'false' }};
+        // Timer is anchored to the server's start time so it survives navigating
+        // away and back.
+        const startedAt = Date.now() - ({{ recording.elapsed_seconds }} * 1000);
 
         function updateTimer() {
-            if (paused) return;
-            const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+            const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
             const m = Math.floor(elapsed / 60);
             const s = elapsed % 60;
             timerEl.textContent = m + ':' + String(s).padStart(2, '0');
         }
+        updateTimer();
         const timerId = setInterval(updateTimer, 1000);
+
+        /* Optional meeting name: saved as you type (debounced), never blocks. */
+        let nameTimer = null;
+        let lastSavedName = nameInput.value;
+        async function saveName() {
+            const val = nameInput.value.trim();
+            if (val === lastSavedName) return;
+            try {
+                const res = await fetch('/api/recording', {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: val})
+                });
+                if (res.ok) {
+                    lastSavedName = val;
+                    nameInput.classList.add('saved');
+                    setTimeout(() => nameInput.classList.remove('saved'), 1200);
+                }
+            } catch (e) { console.error('Name save failed', e); }
+        }
+        nameInput.addEventListener('input', () => {
+            clearTimeout(nameTimer);
+            nameTimer = setTimeout(saveName, 500);
+        });
+        nameInput.addEventListener('blur', () => { clearTimeout(nameTimer); saveName(); });
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); nameInput.blur(); }
+        });
 
         function renderTranscript(data) {
             if (data.text) {
@@ -59,9 +110,7 @@
                     const res = await fetch('/transcript');
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.text) {
-                            renderTranscript(data);
-                        }
+                        if (data.text) renderTranscript(data);
                     }
                 } catch (e) {
                     console.error('Poll error', e);
@@ -70,10 +119,39 @@
             }
         }
 
+        /* If the recording was stopped from another page/tab, leave gracefully. */
+        async function pollStatus() {
+            while (polling) {
+                await new Promise(r => setTimeout(r, 4000));
+                try {
+                    const res = await fetch('/api/recording');
+                    if (!res.ok) continue;
+                    const st = await res.json();
+                    if (!st.is_recording) { window.location.href = '/'; return; }
+                    if (st.is_paused !== paused) setPausedUI(st.is_paused);
+                    if (document.activeElement !== nameInput && st.name !== lastSavedName) {
+                        nameInput.value = st.name; lastSavedName = st.name;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        function setPausedUI(isPaused) {
+            paused = isPaused;
+            if (isPaused) {
+                pauseBtn.textContent = 'Resume';
+                pauseBtn.className = 'btn btn-start';
+                dot.classList.add('paused');
+                label.textContent = 'Paused';
+            } else {
+                pauseBtn.textContent = 'Pause';
+                pauseBtn.className = 'btn btn-pause';
+                dot.classList.remove('paused');
+                label.textContent = 'Recording';
+            }
+        }
+
         copyBtn.addEventListener('click', async () => {
-            // Pull the authoritative full transcript-so-far from the server,
-            // not the on-screen text, so every committed word is included even
-            // if the live render is mid-update. Recording is never interrupted.
             let text = '';
             try {
                 const res = await fetch('/transcript/snapshot');
@@ -99,25 +177,8 @@
         pauseBtn.addEventListener('click', async () => {
             pauseBtn.disabled = true;
             try {
-                if (!paused) {
-                    const res = await fetch('/pause', { method: 'POST' });
-                    if (res.ok) {
-                        paused = true;
-                        pauseBtn.textContent = 'Resume';
-                        pauseBtn.className = 'btn btn-start';
-                        dot.classList.add('paused');
-                        label.textContent = 'Paused';
-                    }
-                } else {
-                    const res = await fetch('/resume', { method: 'POST' });
-                    if (res.ok) {
-                        paused = false;
-                        pauseBtn.textContent = 'Pause';
-                        pauseBtn.className = 'btn btn-pause';
-                        dot.classList.remove('paused');
-                        label.textContent = 'Recording';
-                    }
-                }
+                const res = await fetch(paused ? '/resume' : '/pause', { method: 'POST' });
+                if (res.ok) setPausedUI(!paused);
             } catch (e) {
                 console.error(e);
             }
@@ -125,12 +186,15 @@
         });
 
         stopBtn.addEventListener('click', async () => {
+            clearTimeout(nameTimer);
+            await saveName();
             polling = false;
             clearInterval(timerId);
             stopBtn.disabled = true;
             pauseBtn.disabled = true;
+            nameInput.disabled = true;
             stopBtn.className = 'btn btn-processing';
-            stopBtn.innerHTML = '<span class="spinner"></span> Processing\u2026';
+            stopBtn.innerHTML = '<span class="spinner"></span> Processing…';
             dot.style.animation = 'none';
             dot.style.opacity = '0.3';
             label.textContent = 'Saving';
@@ -148,7 +212,17 @@
             window.location.href = '/';
         });
 
+        const priorToggle = document.getElementById('prior-toggle');
+        if (priorToggle) {
+            const prior = document.getElementById('prior-transcript');
+            priorToggle.addEventListener('click', () => {
+                prior.hidden = !prior.hidden;
+                priorToggle.textContent = prior.hidden ? 'Show earlier transcript' : 'Hide earlier transcript';
+            });
+        }
+
         pollTranscript();
+        pollStatus();
     </script>
 </body>
 </html>

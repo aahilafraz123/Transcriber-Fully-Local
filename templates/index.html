@@ -14,6 +14,11 @@
                 <span class="meeting-badge-dot"></span>
                 <span id="meeting-badge-text">Meeting detected</span>
             </span>
+            {% if is_recording %}
+            <a href="/live" class="nav-link live-link" title="Back to the live transcript">
+                <span class="pulse-dot pulse-dot-red"></span> Live transcript
+            </a>
+            {% endif %}
             <button id="rec-btn" class="btn {% if is_recording %}btn-stop{% else %}btn-start{% endif %}">
                 {% if is_recording %}<span class="pulse-dot"></span> Stop{% else %}Record{% endif %}
             </button>
@@ -21,6 +26,23 @@
     </header>
 
     <main class="container">
+        {% if is_recording %}
+        <div class="recording-row" id="recording-row">
+            <a href="/live" class="recording-left" style="text-decoration:none;color:inherit;">
+                <span class="pulse-dot pulse-dot-red{% if recording.is_paused %} paused{% endif %}"></span>
+                <span class="recording-title{% if not recording.name %} untitled{% endif %}" id="recording-title">{{ recording.name or 'Untitled meeting (in progress)' }}</span>
+                <span class="mode-chip mode-{{ recording.mode }}">{{ recording.mode_label }}</span>
+                {% if recording.resume_id %}<span class="parts-chip">&#8635; resuming</span>{% endif %}
+                <span class="recording-timer" id="recording-timer">0:00</span>
+            </a>
+            <div class="recording-actions">
+                <input id="live-name-input" class="name-input" type="text" maxlength="120"
+                       placeholder="Name it (optional)" value="{{ recording.name }}"
+                       title="Rename the recording in progress. Saved as you type.">
+                <a href="/live" class="btn btn-secondary">Open</a>
+            </div>
+        </div>
+        {% endif %}
         {% set ns = namespace(last_label='') %}
         {% for m in meetings|reverse %}
             {% set d = m.date[:10] %}
@@ -33,10 +55,13 @@
                 <a href="/meeting/{{ m.id }}" class="meeting-link">
                     <span class="meeting-name">{{ m.name }}</span>
                     <span class="meeting-meta">
+                        {% if m.parts and m.parts|length > 1 %}<span class="parts-chip" title="Recorded in {{ m.parts|length }} parts">&#8635; {{ m.parts|length }} parts</span>{% endif %}
+                        <span class="mode-chip mode-{{ m.mode or 'virtual' }}">{{ mode_labels.get(m.mode or 'virtual', 'Virtual') }}</span>
                         <span class="duration">{{ m.duration_minutes | format_duration }}</span>
                         <span class="time">{{ m.date | format_time }}</span>
                     </span>
                 </a>
+                <button class="resume-btn" data-id="{{ m.id }}" data-name="{{ m.name }}" data-mode="{{ m.mode or 'virtual' }}" title="Resume this meeting: keep recording and add to its transcript"{% if is_recording %} disabled{% endif %}>&#8635; Resume</button>
                 <button class="delete-btn" data-id="{{ m.id }}" title="Delete">&times;</button>
             </div>
         {% else %}
@@ -49,6 +74,15 @@
             </button>
             <div id="settings-body" class="settings-body">
                 <div class="device-panel">
+                    <div class="device-panel-title">Microphone check</div>
+                    <p class="panel-help">Records 4 seconds from this Mac's microphone and shows what it heard. Use it to confirm your voice reaches the app (and that macOS has given it microphone permission).</p>
+                    <div class="mic-test-row">
+                        <button id="mic-test-btn" class="btn btn-secondary">Test microphone</button>
+                        <div class="mic-meter" id="mic-meter" hidden><div class="mic-meter-fill" id="mic-meter-fill"></div></div>
+                    </div>
+                    <div id="mic-test-result" class="mic-test-result" hidden></div>
+                </div>
+                <div class="device-panel">
                     <div class="device-panel-title">Multi-Output Device</div>
                     <div id="device-list">
                         <p style="color:var(--text-3);font-size:0.8125rem;">Loading devices...</p>
@@ -57,6 +91,32 @@
             </div>
         </div>
     </main>
+
+    <!-- Asked every time before a recording starts -->
+    <div id="mode-modal" class="modal-backdrop" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mode-title">
+            <h2 id="mode-title" class="modal-title">How are you meeting?</h2>
+            <p class="modal-sub" id="modal-sub">Pick one to start recording. You'll be asked every time.</p>
+            <div id="modal-resume-note" class="modal-resume-note" hidden></div>
+            <input id="modal-name" class="name-input modal-name" type="text" maxlength="120"
+                   placeholder="Meeting name (optional)"
+                   title="Optional. Leave blank and the meeting is named by date and time.">
+            <div class="mode-options">
+                <button class="mode-card" data-mode="virtual">
+                    <span class="mode-card-title">Virtual</span>
+                    <span class="mode-card-desc">A call on this Mac (Teams, Slack, Zoom&hellip;). Records the call audio through BlackHole plus your microphone.</span>
+                </button>
+                <button class="mode-card" data-mode="in_person">
+                    <span class="mode-card-title">In-person</span>
+                    <span class="mode-card-desc">A meeting in the room or on your phone. Records 100% from this Mac's microphone. Your speakers are left alone.</span>
+                </button>
+            </div>
+            <div id="modal-error" class="modal-error" hidden></div>
+            <div class="modal-actions">
+                <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const btn = document.getElementById('rec-btn');
@@ -72,32 +132,197 @@
             }
         }
 
+        /* Record -> ask Virtual / In-person every time -> start */
+        const modal = document.getElementById('mode-modal');
+        const modalName = document.getElementById('modal-name');
+        const modalError = document.getElementById('modal-error');
+        const modeCards = Array.from(document.querySelectorAll('.mode-card'));
+
+        const modalTitle = document.getElementById('mode-title');
+        const modalSub = document.getElementById('modal-sub');
+        const modalResumeNote = document.getElementById('modal-resume-note');
+        let resumeTarget = null;  // {id, name, mode} when resuming an existing meeting
+
+        function openModal(resume) {
+            resumeTarget = resume || null;
+            modalError.hidden = true;
+            modeCards.forEach(c => { c.disabled = false; c.classList.remove('busy', 'last-used'); });
+            if (resumeTarget) {
+                modalTitle.textContent = 'Resume \u201C' + resumeTarget.name + '\u201D';
+                modalSub.textContent = 'How are you meeting this time? New audio and transcript are added to the existing meeting.';
+                modalName.value = resumeTarget.name;
+                modalResumeNote.textContent = 'Last time: ' + (resumeTarget.mode === 'in_person' ? 'In-person' : 'Virtual');
+                modalResumeNote.hidden = false;
+                const last = modeCards.find(c => c.dataset.mode === resumeTarget.mode);
+                if (last) last.classList.add('last-used');
+            } else {
+                modalTitle.textContent = 'How are you meeting?';
+                modalSub.textContent = "Pick one to start recording. You'll be asked every time.";
+                modalName.value = '';
+                modalResumeNote.hidden = true;
+            }
+            modal.hidden = false;
+            setTimeout(() => modalName.focus(), 0);
+        }
+        function closeModal() { modal.hidden = true; resumeTarget = null; }
+
+        document.querySelectorAll('.resume-btn').forEach(rb => {
+            rb.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                if (recording) return;
+                openModal({id: rb.dataset.id, name: rb.dataset.name, mode: rb.dataset.mode});
+            });
+        });
+
+        // /?resume=<id> (from a meeting page) opens the dialog straight away.
+        const resumeParam = new URLSearchParams(window.location.search).get('resume');
+        if (resumeParam && !recording) {
+            const rb = document.querySelector('.resume-btn[data-id="' + resumeParam + '"]');
+            if (rb) openModal({id: rb.dataset.id, name: rb.dataset.name, mode: rb.dataset.mode});
+            history.replaceState(null, '', '/');
+        }
+
+        document.getElementById('modal-cancel').addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+
+        async function startRecording(mode) {
+            modeCards.forEach(c => { c.disabled = true; });
+            const card = modeCards.find(c => c.dataset.mode === mode);
+            if (card) card.classList.add('busy');
+            modalError.hidden = true;
+            try {
+                const res = await fetch('/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mode: mode, name: modalName.value.trim(),
+                                          resume_id: resumeTarget ? resumeTarget.id : null})
+                });
+                if (res.ok) { window.location.href = '/live'; return; }
+                let msg = 'Could not start recording.';
+                try { const err = await res.json(); msg = err.error + (err.hint ? ' ' + err.hint : ''); } catch (e) {}
+                modalError.textContent = msg;
+                modalError.hidden = false;
+            } catch (e) {
+                modalError.textContent = 'Could not reach the app: ' + e;
+                modalError.hidden = false;
+            }
+            modeCards.forEach(c => { c.disabled = false; c.classList.remove('busy'); });
+        }
+        modeCards.forEach(card => card.addEventListener('click', () => startRecording(card.dataset.mode)));
+
         btn.addEventListener('click', async () => {
+            if (!recording) { openModal(); return; }
             btn.disabled = true;
             try {
-                if (!recording) {
-                    const res = await fetch('/start', { method: 'POST' });
-                    if (res.ok) {
-                        window.location.href = '/live';
-                        return;
-                    }
-                } else {
-                    btn.className = 'btn btn-processing';
-                    btn.innerHTML = '<span class="spinner"></span> Processing\u2026';
-                    const res = await fetch('/stop', { method: 'POST' });
-                    if (res.ok) {
-                        const meeting = await res.json();
-                        window.location.href = '/meeting/' + meeting.id;
-                        return;
-                    }
-                    recording = false;
-                    updateBtn();
+                btn.className = 'btn btn-processing';
+                btn.innerHTML = '<span class="spinner"></span> Processing\u2026';
+                const res = await fetch('/stop', { method: 'POST' });
+                if (res.ok) {
+                    const meeting = await res.json();
+                    window.location.href = '/meeting/' + meeting.id;
+                    return;
                 }
+                recording = false;
+                updateBtn();
             } catch (e) {
                 console.error(e);
             }
             btn.disabled = false;
         });
+
+        /* Microphone check */
+        const micBtn = document.getElementById('mic-test-btn');
+        const micMeter = document.getElementById('mic-meter');
+        const micFill = document.getElementById('mic-meter-fill');
+        const micResult = document.getElementById('mic-test-result');
+        micBtn.addEventListener('click', async () => {
+            micBtn.disabled = true;
+            micResult.hidden = true;
+            micMeter.hidden = false;
+            micFill.style.width = '0%';
+            let left = 4;
+            micBtn.textContent = 'Speak now\u2026 ' + left;
+            const countdown = setInterval(() => { left -= 1; if (left > 0) micBtn.textContent = 'Speak now\u2026 ' + left; else micBtn.textContent = 'Listening\u2026'; }, 1000);
+            try {
+                const res = await fetch('/api/mic-test', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({seconds: 4})
+                });
+                const data = await res.json();
+                clearInterval(countdown);
+                micResult.hidden = false;
+                if (!res.ok) {
+                    micResult.className = 'mic-test-result bad';
+                    micResult.textContent = (data.error || 'Microphone test failed') + (data.hint ? ' ' + data.hint : '');
+                } else {
+                    micFill.style.width = Math.max(2, data.level_percent) + '%';
+                    if (data.silent) {
+                        micResult.className = 'mic-test-result bad';
+                        micResult.textContent = 'Silence from "' + data.device + '". ' + data.hint;
+                    } else if (data.text) {
+                        micResult.className = 'mic-test-result good';
+                        micResult.innerHTML = 'Microphone works (' + data.device.replace(/</g, '&lt;') + '). Heard: <em>\u201C' + data.text.replace(/</g, '&lt;') + '\u201D</em>';
+                    } else {
+                        micResult.className = 'mic-test-result warn';
+                        micResult.textContent = 'Audio captured from "' + data.device + '" (level ' + data.level_percent + '%), but no words recognised. ' + data.hint;
+                    }
+                }
+            } catch (e) {
+                clearInterval(countdown);
+                micResult.hidden = false;
+                micResult.className = 'mic-test-result bad';
+                micResult.textContent = 'Microphone test failed: ' + e;
+            }
+            micBtn.textContent = 'Test microphone';
+            micBtn.disabled = false;
+        });
+
+        /* In-progress recording: live timer + rename without leaving the page */
+        const recRow = document.getElementById('recording-row');
+        if (recRow) {
+            const rTimer = document.getElementById('recording-timer');
+            const rTitle = document.getElementById('recording-title');
+            const rName = document.getElementById('live-name-input');
+            const startedAt = Date.now() - ({{ recording.elapsed_seconds }} * 1000);
+            function tick() {
+                const el = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+                rTimer.textContent = Math.floor(el / 60) + ':' + String(el % 60).padStart(2, '0');
+            }
+            tick();
+            setInterval(tick, 1000);
+
+            let t = null, lastSaved = rName.value;
+            async function saveLiveName() {
+                const val = rName.value.trim();
+                if (val === lastSaved) return;
+                try {
+                    const res = await fetch('/api/recording', {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name: val})
+                    });
+                    if (res.ok) {
+                        lastSaved = val;
+                        rTitle.textContent = val || 'Untitled meeting (in progress)';
+                        rTitle.classList.toggle('untitled', !val);
+                        rName.classList.add('saved');
+                        setTimeout(() => rName.classList.remove('saved'), 1200);
+                    }
+                } catch (e) { console.error(e); }
+            }
+            rName.addEventListener('input', () => { clearTimeout(t); t = setTimeout(saveLiveName, 500); });
+            rName.addEventListener('blur', () => { clearTimeout(t); saveLiveName(); });
+            rName.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); rName.blur(); } });
+
+            // If it was stopped from another tab, refresh to show the saved meeting.
+            setInterval(async () => {
+                try {
+                    const res = await fetch('/api/recording');
+                    if (res.ok && !(await res.json()).is_recording) window.location.reload();
+                } catch (e) {}
+            }, 5000);
+        }
 
         /* Inline rename on double-click */
         document.querySelectorAll('.meeting-name').forEach(nameEl => {

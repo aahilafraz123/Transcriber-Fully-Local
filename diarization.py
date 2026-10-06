@@ -49,11 +49,24 @@ def diarize_turns(wav_path):
     return turns
 
 
-def assign_speakers(words, turns, you_label=None):
-    """Label transcript words by overlap with remote turns; the rest are "You".
+def _nearest_turn(turns, mid):
+    best, best_dist = None, None
+    for t in turns:
+        dist = 0.0 if t["start"] <= mid <= t["end"] else min(abs(mid - t["start"]), abs(mid - t["end"]))
+        if best is None or dist < best_dist:
+            best, best_dist = t, dist
+    return best
 
-    `words`: [{start, end, word}] from the mixed transcript (word timestamps).
-    `turns`: remote speaker turns from the clean BlackHole stream.
+
+def assign_speakers(words, turns, you_label=None, nearest=False):
+    """Label transcript words by overlap with diarized turns.
+
+    Virtual mode (`nearest=False`): `turns` come from the clean BlackHole
+    stream, so any word outside a turn is the local user ("You").
+    In-person mode (`nearest=True`): everyone is on the room mic, so a word
+    outside every turn is attributed to the closest turn in time instead.
+
+    `words`: [{start, end, word}] from the transcript (word timestamps).
     Returns grouped segments: [{speaker, start, end, text}].
     """
     you_label = you_label or config.YOU_LABEL
@@ -61,10 +74,14 @@ def assign_speakers(words, turns, you_label=None):
     for w in words:
         mid = (w["start"] + w["end"]) / 2.0
         speaker = you_label
+        matched = False
         for t in turns:
             if t["start"] <= mid <= t["end"]:
                 speaker = t["speaker"]
+                matched = True
                 break
+        if not matched and nearest and turns:
+            speaker = _nearest_turn(turns, mid)["speaker"]
         if segments and segments[-1]["speaker"] == speaker:
             segments[-1]["end"] = w["end"]
             segments[-1]["text"] += w["word"]
